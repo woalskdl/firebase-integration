@@ -1,12 +1,16 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-
+import { ActivityIndicator, Button, Platform, StyleSheet, View } from 'react-native';
 import { GoogleSignin, GoogleSigninButton } from '@react-native-google-signin/google-signin';
 import { useCallback, useEffect, useState } from 'react';
 import firebaseAuth from '@react-native-firebase/auth';
+import * as ImagePicker from 'expo-image-picker';
+import storage from '@react-native-firebase/storage';
+import * as FileSystem from 'expo-file-system';
 
 GoogleSignin.configure();
 
 export default function App() {
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [lastUploadImage, setLastUploadImage] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -55,6 +59,44 @@ export default function App() {
     getCurrentUserInfo();
   }, [])
 
+  const onPressPickFeil = useCallback(async () => {
+    const pickResult = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality:1,
+    })
+    
+    if(pickResult.canceled) {
+      return;
+    }
+
+    const image = pickResult.assets[0];
+
+    setSelectedImage(image);
+
+    const uri = image.uri;
+    const fileNameArray = uri.split('/');
+    const fileName = fileNameArray[fileNameArray.length - 1];
+
+    const putResult = await storage().ref(fileName).putFile(Platform.OS === 'ios' ? uri.replace('file://', '') : uri);
+
+    setLastUploadImage(putResult);
+
+  }, []);
+
+  const onPressDownloadImage = useCallback(async () => {
+    const downloadUrl = await storage().ref(lastUploadImage.metadata.fullPath).getDownloadURL();
+
+    const {uri} = await FileSystem.createDownloadResumable(
+      downloadUrl,
+      FileSystem.documentDirectory + lastUploadImage.metadata.name,
+      {}
+    ).downloadAsync();
+
+    
+    
+  }, [lastUploadImage]);
+
   return (
     <View style={{ flex:1, alignItems:'center', justifyContent:'center', }}>
       {
@@ -72,7 +114,15 @@ export default function App() {
           )
         )
       }
-      </View>
+      {
+        selectedImage !== null && (
+          <Image source={{uri:selectedImage.uri}} style={{width:200, height:200}} />
+        )
+      }
+
+      <Button title='PICK FILE' onPress={onPressPickFeil}></Button>
+      <Button title='DOWNLOAD FILE' onPress={onPressDownloadImage}/>
+    </View>
   );
 }
 
